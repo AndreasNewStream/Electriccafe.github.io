@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>three.js webgl - collada - kinematics</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+</head>
+
+<style>
+    body {
+        background-color: #333;
+        color: #eee;
+        margin: 0;
+    }
+</style>
+
+<body>
+
+    <script type="module">
+
+        //import * as THREE from '../build/three.module.js';
+        import * as THREE from 'https://unpkg.com/three@0.126.1/build/three.module.js';
+        import { ARButton } from 'https://unpkg.com/three@0.126.1/examples/jsm/webxr/ARButton.js';
+
+        import Stats from 'https://unpkg.com/three@0.126.1/examples/jsm/libs/stats.module.js';
+
+        import { TWEEN } from 'https://unpkg.com/three@0.126.1/examples/jsm/libs/tween.module.min.js';
+        //import { GLTFLoader } from 'https://unpkg.com/three@0.126.1/examples/jsm/loaders/GLTFLoader.js'
+        import { ColladaLoader } from 'https://unpkg.com/three@0.126.1/examples/jsm/loaders/ColladaLoader.js';
+
+        let container, stats;
+
+        let camera, scene, renderer;
+        let particleLight;
+        let dae;
+
+        var place = false;
+
+        let controller;
+
+        let kinematics;
+        let kinematicsTween;
+        const tweenParameters = {};
+
+        const loader = new ColladaLoader();
+
+        loader.load('./universal_robot_ur5.dae', function (collada) {
+            dae = collada.scene;
+            dae.children[0].children[0].children[0].children[1].children[1].material[0].flatshading = true
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[0].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[1].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[2].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[3].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[0].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[1].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[1].color.setHex(0xff0000);
+            dae.children[0].children[0].children[0].children[1].children[1].material[1].flatshading = true
+
+            dae.children[0].traverse(function (child) {
+                if (child.isMesh) {
+                    child.material.flatShading = true;
+                }
+            });
+
+            console.log(dae.children);
+            dae.scale.x = dae.scale.y = dae.scale.z = 0.5;
+            dae.updateMatrix();
+
+            kinematics = collada.kinematics;
+            init();
+            animate();
+
+        });
+
+        function init() {
+
+            container = document.createElement('div');
+            document.body.appendChild(container);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 2000);
+
+            camera.position.set(0, 0, 1);
+
+            scene = new THREE.Scene();
+
+            scene.add(dae);
+            var light5 = new THREE.DirectionalLight(0xffffff);
+            light5.position.set(0, 1, 1).normalize();
+            scene.add(light5);
+
+            particleLight = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            scene.add(particleLight);
+
+            const light2 = new THREE.HemisphereLight(0xffffff, 0x00bbff, 0.1);
+            light2.position.set(0.5, 1, 0.25);
+            scene.add(light2);
+
+            const light = new THREE.HemisphereLight(0xffeeee, 0x111122);
+            scene.add(light);
+
+            const pointLight = new THREE.PointLight(0xffffff, 0.3);
+            particleLight.add(pointLight);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            document.body.appendChild(ARButton.createButton(renderer));
+            stats = new Stats();
+            container.appendChild(stats.dom);
+
+            setupTween();
+
+            function onSelect() {
+
+                if (!place) {
+                    dae.position.set(0, 0, 0);
+                    dae.children[0].position.set(0, 0, 0).applyMatrix4(controller.matrixWorld);
+                    dae.children[0].quaternion.setFromRotationMatrix(controller.matrixWorld);
+                    scene.add(dae);
+                    place = true;
+                }
+                else {
+
+                }
+
+            }
+
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setupTween() {
+            const duration = THREE.MathUtils.randInt(4000, 5000);
+            const target = {};
+            for (const prop in kinematics.joints) {
+
+                if (kinematics.joints.hasOwnProperty(prop)) {
+
+                    if (!kinematics.joints[prop].static) {
+
+                        const joint = kinematics.joints[prop];
+
+                        const old = tweenParameters[prop];
+
+                        const position = old ? old : joint.zeroPosition;
+
+                        tweenParameters[prop] = position;
+
+                        target[prop] = THREE.MathUtils.randInt(joint.limits.min, joint.limits.max);
+
+                    }
+
+                }
+
+            }
+
+            kinematicsTween = new TWEEN.Tween(tweenParameters).to(target, duration).easing(TWEEN.Easing.Quadratic.Out).onStart(function (object) {
+                console.log("ny start")
+            }).onUpdate(function (object) { console.log("update : " + object) });
+
+            kinematicsTween.onUpdate(function (object) {
+
+                for (const prop in kinematics.joints) {
+
+                    if (kinematics.joints.hasOwnProperty(prop)) {
+
+                        if (!kinematics.joints[prop].static) {
+
+                            kinematics.setJointValue(prop, object[prop]);
+
+                        }
+
+                    }
+
+                }
+
+            });
+
+            kinematicsTween.start();
+            setTimeout(setupTween, duration);
+
+        }
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+
+            const timer = Date.now() * 0.0001;
+
+            particleLight.position.x = Math.sin(timer * 4) * 3009;
+            particleLight.position.y = Math.cos(timer * 5) * 4000;
+            particleLight.position.z = Math.cos(timer * 4) * 3009;
+            TWEEN.update();
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+</body>
+
+</html>
