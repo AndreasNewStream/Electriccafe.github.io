@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <title>Document</title>
+</head>
+<style>
+    body {
+        font-size: 30px;
+    }
+</style>
+
+<body>
+    <div class="container">
+        <video class="input_video"></video>
+        <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+        Degrees:<div id="deg"></div>
+    </div>
+
+    <script type="module">
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const canvasCtx = canvasElement.getContext('2d');
+        const deg = document.getElementById('deg');
+
+        var starttid = 0;
+        var sluttid = 0;
+        var antaldata = 0;
+        var datan = []
+        var klar = false;
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(
+                results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            // 4 = topp på tumme 2 = tummens rot 0 = handled
+            // 4-3  3-2
+            if (results.multiHandLandmarks) {
+                if (results.multiHandLandmarks.length) {
+                    if (antaldata < 30) {
+                        datan.push(results.multiHandLandmarks)
+                        antaldata++;
+                    }
+                    else { klar = true }
+                    if (klar) {
+                        console.log(datan)
+                    }
+
+                }
+
+                for (const landmarks of results.multiHandLandmarks) {
+                    vector(landmarks[4], landmarks[3], landmarks[2])
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS,
+                        { color: '#00FF00', lineWidth: 5 });
+                    drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2 });
+                }
+            }
+            canvasCtx.restore();
+        }
+
+
+        function vector(vec1, vec2, vec3) {
+
+            var x1 = vec1.x - vec2.x
+            var y1 = vec1.y - vec2.y
+            var z1 = vec1.z - vec2.z
+            var x2 = vec2.x - vec3.x
+            var y2 = vec2.y - vec3.y
+            var z2 = vec2.z - vec3.z
+
+            var x3 = x1 * x2;
+            var y3 = y1 * y2;
+            var z3 = z1 * z2;
+
+            var sum = x3 + y3 + z3;
+
+            var a = Math.pow(x1, 2) + Math.pow(y1, 2) + Math.pow(z1, 2);
+            var b = Math.pow(x2, 2) + Math.pow(y2, 2) + Math.pow(z2, 2);
+
+            var cos = sum / (Math.sqrt(a) * Math.sqrt(b))
+
+            var degrees = Math.acos(cos) * (180 / Math.PI);
+
+            // avstånd mellan 2 punkter d = ((x2 - x1)(power of 2 that is->) 2 + (y2 - y1)2 + (z2 - z1)2)1/2
+
+            deg.innerHTML = Math.round(degrees);
+
+            if (degrees < 40) {
+                starttid = Date.now();
+            }
+            else {
+                sluttid = sluttid + (Date.now() - starttid);
+                console.log("Total tid över 40 grader " + Math.floor(sluttid / 1000))
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.3.1632795355/${file}`;
+            }
+        });
+        hands.setOptions({
+            maxNumHands: 2,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 720
+        });
+        camera.start();
+    </script>
+</body>
+
+</html>
