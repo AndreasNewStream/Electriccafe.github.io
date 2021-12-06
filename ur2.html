@@ -20,25 +20,24 @@
 
     <script type="module">
 
-        //import * as THREE from '../build/three.module.js';
         import * as THREE from 'https://unpkg.com/three@0.126.1/build/three.module.js';
         import { ARButton } from 'https://unpkg.com/three@0.126.1/examples/jsm/webxr/ARButton.js';
-
-        // import Stats from 'https://unpkg.com/three@0.126.1/examples/jsm/libs/stats.module.js';
-
         import { TWEEN } from 'https://unpkg.com/three@0.126.1/examples/jsm/libs/tween.module.min.js';
         //import { GLTFLoader } from 'https://unpkg.com/three@0.126.1/examples/jsm/loaders/GLTFLoader.js'
         import { ColladaLoader } from 'https://unpkg.com/three@0.126.1/examples/jsm/loaders/ColladaLoader.js';
 
         let container, stats;
-
         let camera, scene, renderer;
         let particleLight;
         let dae;
-
         var place = false;
 
         let controller;
+
+        let reticle;
+
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
 
         let kinematics;
         let kinematicsTween;
@@ -48,14 +47,25 @@
 
         loader.load('./universal_robot_ur5.dae', function (collada) {
             dae = collada.scene;
-            dae.children[0].children[0].children[0].children[1].children[1].material[0].flatshading = true
+            console.log(dae.children[0].children[0].children[0].children[1].children[0].children[1].material[4])
+            console.log(dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0])
+            dae.children[0].children[0].children[0].children[1].children[1].material[0].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[1].material[1].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[0].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[1].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[2].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[1].material[3].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[1].material[4].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[0].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[1].flatShading = true;
             dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[1].material[1].color.setHex(0xff0000);
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[0].children[1].material[0].flatShading = true;
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[0].children[1].material[1].flatShading = true;
+            // hål i verktyget
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[0].children[0].children[0].material.color.setHex(0x00ffff);
+            // verktygetsutsida
+            dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[0].children[0].children[2].material.color.setHex(0x00ffff);
+            //dae.children[0].children[0].children[0].children[1].children[0].children[0].children[0].children[0]
             dae.children[0].children[0].children[0].children[1].children[1].material[1].flatshading = true
 
             dae.children[0].traverse(function (child) {
@@ -69,6 +79,8 @@
             dae.updateMatrix();
 
             kinematics = collada.kinematics;
+            console.log(kinematics);
+            // console.log(kinematics.getJointValue('elbow_joint'));
             init();
             animate();
 
@@ -80,18 +92,16 @@
             document.body.appendChild(container);
 
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 2000);
-
             camera.position.set(0, 0, 1);
-
             scene = new THREE.Scene();
-
             scene.add(dae);
+
             var light5 = new THREE.DirectionalLight(0xffffff);
             light5.position.set(0, 1, 1).normalize();
             scene.add(light5);
 
-            particleLight = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-            scene.add(particleLight);
+            //particleLight = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            //scene.add(particleLight);
 
             const light2 = new THREE.HemisphereLight(0xffffff, 0x00bbff, 0.1);
             light2.position.set(0.5, 1, 0.25);
@@ -100,8 +110,8 @@
             const light = new THREE.HemisphereLight(0xffeeee, 0x111122);
             scene.add(light);
 
-            const pointLight = new THREE.PointLight(0xffffff, 0.3);
-            particleLight.add(pointLight);
+            //const pointLight = new THREE.PointLight(0xffffff, 0.3);
+            //particleLight.add(pointLight);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -109,24 +119,23 @@
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            document.body.appendChild(ARButton.createButton(renderer));
-            //stats = new Stats();
-            //container.appendChild(stats.dom);
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
             setupTween();
 
             function onSelect() {
-
-                if (!place) {
-                    dae.position.set(0, 0, 0);
-                    dae.children[0].position.set(0, 0, 0).applyMatrix4(controller.matrixWorld);
-                    dae.children[0].quaternion.setFromRotationMatrix(controller.matrixWorld);
-                    scene.add(dae);
-                    place = true;
-                }
-                else {
-
-                }
+                console.log(controller.matrixWorld);
+                dae.position.setFromMatrixPosition(reticle.matrix);
+                /* if (!place) {
+                     dae.position.set(0, 0, 0);
+                     dae.children[0].position.set(0, 0, 0).applyMatrix4(controller.matrixWorld);
+                     dae.children[0].quaternion.setFromRotationMatrix(controller.matrixWorld);
+                     scene.add(dae);
+                     place = true;
+                 }
+                 else {
+ 
+                 } */
 
             }
 
@@ -134,27 +143,99 @@
             controller.addEventListener('select', onSelect);
             scene.add(controller);
 
+            reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(- Math.PI / 2),
+                new THREE.MeshBasicMaterial()
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+
             window.addEventListener('resize', onWindowResize);
         }
 
         function setupTween() {
-            const duration = THREE.MathUtils.randInt(4000, 5000);
+            const duration = THREE.MathUtils.randInt(5000, 6000);
             const target = {};
+
+
+
+
             for (const prop in kinematics.joints) {
 
                 if (kinematics.joints.hasOwnProperty(prop)) {
 
                     if (!kinematics.joints[prop].static) {
 
+                        /*base_link-base_fixed_joint
+                            ee_fixed_joint: 
+                            elbow_joint: 
+                            shoulder_lift_joint: 
+                            shoulder_pan_joint: 
+                            world_joint: 
+                            wrist_1_joint: 
+                            wrist_2_joint: 
+                            wrist_3_joint: 
+                            wrist_3_link-tool0_fixed_joint:*/
+
+                        //console.log(prop)
                         const joint = kinematics.joints[prop];
+
+                        // verktygshållaren sidledes
+                        if (prop == 'wrist_1_joint') {
+
+                            joint.limits.min = -70;
+                            joint.limits.max = 70;
+                        }
+                        // verktygshållare höjdled
+                        if (prop == 'wrist_2_joint') {
+
+                            joint.limits.min = -180;
+                            joint.limits.max = 180;
+                        }
+                        // verktyghuvud rotera
+                        if (prop == 'wrist_3_joint') {
+
+                            joint.limits.min = -180;
+                            joint.limits.max = 180;
+                        }
+                        if (prop == 'world_joint') {
+
+                            joint.limits.min = -90;
+                            joint.limits.max = 90;
+                        }
+                        // arm närmast verktyg
+                        if (prop == 'elbow_joint') {
+
+                            joint.limits.min = -130;
+                            joint.limits.max = 130;
+                        }
+                        if (prop == 'shoulder_lift_joint') {
+
+                            joint.limits.min = -120;
+                            joint.limits.max = -30;
+                        }
+                        // basen som vrider
+                        if (prop == 'shoulder_pan_joint') {
+
+                            joint.limits.min = -90;
+                            joint.limits.max = 90;
+                        }
+
+
+                        //console.log(joint);
 
                         const old = tweenParameters[prop];
 
                         const position = old ? old : joint.zeroPosition;
 
                         tweenParameters[prop] = position;
-
+                        // joint.limits.min = -90;
+                        // joint.limits.max = 90;
                         target[prop] = THREE.MathUtils.randInt(joint.limits.min, joint.limits.max);
+
+                        //console.log(target[prop])
 
                     }
 
@@ -201,13 +282,63 @@
             renderer.setAnimationLoop(render);
         }
 
-        function render() {
+        function render(timestamp, frame) {
+
+            if (frame) {
+
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                if (hitTestSourceRequested === false) {
+
+                    session.requestReferenceSpace('viewer').then(function (referenceSpace) {
+
+                        session.requestHitTestSource({ space: referenceSpace }).then(function (source) {
+
+                            hitTestSource = source;
+
+                        });
+
+                    });
+
+                    session.addEventListener('end', function () {
+
+                        hitTestSourceRequested = false;
+                        hitTestSource = null;
+
+                    });
+
+                    hitTestSourceRequested = true;
+
+                }
+
+                if (hitTestSource) {
+
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                    if (hitTestResults.length) {
+
+                        const hit = hitTestResults[0];
+
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+
+                    } else {
+
+                        reticle.visible = false;
+
+                    }
+
+                }
+
+            }
 
             const timer = Date.now() * 0.0001;
+            //
 
-            particleLight.position.x = Math.sin(timer * 4) * 3009;
-            particleLight.position.y = Math.cos(timer * 5) * 4000;
-            particleLight.position.z = Math.cos(timer * 4) * 3009;
+            // particleLight.position.x = Math.sin(timer * 4) * 3009;
+            //  particleLight.position.y = Math.cos(timer * 5) * 4000;
+            //  particleLight.position.z = Math.cos(timer * 4) * 3009;
             TWEEN.update();
             renderer.render(scene, camera);
 
