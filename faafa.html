@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+</head>
+
+<style>
+    button {
+        width: 100%;
+        height: 150px;
+    }
+</style>
+
+<body onload="init();">
+    <p>
+
+        <button onclick="snapshot();">Take Snapshot</button>
+    </p>
+    <video onclick="snapshot(this);" width=540 height=960 id="video" controls autoplay></video>
+    <p>
+    <div id="koden"></div>
+    <p>
+        <canvas id="myCanvas" width=360 height=640></canvas>
+
+</body>
+<script>
+    startWebcam()
+    //--------------------
+    // GET USER MEDIA CODE
+    //--------------------
+    navigator.getUserMedia = (navigator.getUserMedia ||
+        navigator.webkitGetUserMedia ||
+        navigator.mozGetUserMedia ||
+        navigator.msGetUserMedia);
+
+    var video;
+    var webcamStream;
+    var koden = document.getElementById('koden');
+
+    function startWebcam() {
+        if (navigator.getUserMedia) {
+            navigator.getUserMedia(
+
+                // constraints
+                {
+                    video: {
+                        facingMode: 'environment',
+                        width: {
+                            exact: 1920
+                        },
+                        height: {
+                            exact: 1080
+                        }
+                    },
+                    audio: false
+                },
+
+                // successCallback
+                function (localMediaStream) {
+                    video = document.querySelector('video');
+                    video.srcObject = localMediaStream;
+                    webcamStream = localMediaStream;
+                },
+
+                // errorCallback
+                function (err) {
+                    console.log("The following error occured: " + err);
+                }
+            );
+        } else {
+            console.log("getUserMedia not supported");
+        }
+    }
+
+    function stopWebcam() {
+        webcamStream.stop();
+    }
+    //---------------------
+    // TAKE A SNAPSHOT CODE
+    //---------------------
+    var canvas, ctx;
+
+    function init() {
+        canvas = document.getElementById("myCanvas");
+        canvas.width = 360;
+        canvas.height = 640;
+        ctx = canvas.getContext('2d');
+    }
+
+    function snapshot() {
+        // Draws current image from the video element into the canvas
+        ctx.drawImage(video, 0, 0, 360, 640);
+        const barcodeDetector = new BarcodeDetector();
+        const image = document.getElementById("myCanvas");
+
+        /*  BarcodeDetector.getSupportedFormats()
+              .then(supportedFormats => {
+                  supportedFormats.forEach(format => console.log(format));
+              });*/
+
+        console.log(video.videoWidth)
+        console.log(video.videoHeight)
+
+        barcodeDetector
+            .detect(image)
+            .then((barcodes) => {
+                //let pre = document.createElement("pre");
+                //pre.innerHTML = JSON.stringify(barcodes, null, 2);
+                console.log(JSON.stringify(barcodes, null, 2))
+                //var svar = JSON.stringify(barcodes, null, 2);
+                //console.log(barcodes);
+                if (barcodes) {
+                    koden.innerHTML = "";
+
+                    barcodes.forEach(val => {
+                        // console.log(val.rawValue);
+
+                        ctx.beginPath();
+                        ctx.lineWidth = 15;
+                        ctx.strokeStyle = 'green';
+                        ctx.moveTo(val.cornerPoints[0].x, val.cornerPoints[0].y)
+                        ctx.lineTo(val.cornerPoints[1].x, val.cornerPoints[1].y);
+                        ctx.lineTo(val.cornerPoints[2].x, val.cornerPoints[2].y);
+                        ctx.lineTo(val.cornerPoints[3].x, val.cornerPoints[3].y);
+                        ctx.lineTo(val.cornerPoints[0].x, val.cornerPoints[0].y);
+                        ctx.stroke();
+                        koden.innerHTML += val.rawValue + " "
+
+                    })
+                }
+                if (barcodes.length < 1) {
+                    ctx.fillStyle = "#FF0000";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    console.log("nej")
+                    koden.innerHTML = "Ingen kod läst";
+                }
+            })
+            .catch(console.error);
+
+    }
+
+</script>
+
+</html>
