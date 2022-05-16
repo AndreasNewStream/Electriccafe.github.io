@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensorread</title>
+</head>
+
+<body>
+
+    <div id="lat">1</div>
+    <div id="long">2</div>
+    <div id="hojd">3</div>
+    <div id="acc">4</div>
+    <div id="head">5</div>
+    <div id="alpha">6</div>
+    <div id="beta">7</div>
+    <div id="gamma">8</div>
+    <button id="start">Start</button>
+
+    <script>
+
+        document.getElementById('start').addEventListener('click', () => {
+            navigator.geolocation.watchPosition(yes, no, {
+                enableHighAccuracy: false,
+                timeout: 5000,
+                maximumAge: 0
+            })
+            window.addEventListener('deviceorientation', onChange)
+
+        })
+
+        function onChange(ok) {
+            console.log(ok);
+            document.getElementById('alpha').innerHTML = ok.alpha;
+            document.getElementById('beta').innerHTML = ok.beta;
+            document.getElementById('gamma').innerHTML = ok.gamma;
+        }
+
+        function yes(position) {
+            console.log(position)
+
+            document.getElementById('lat').innerHTML = position.coords.latitude;
+            document.getElementById('long').innerHTML = position.coords.longitude;
+            document.getElementById('hojd').innerHTML = position.coords.altitude;
+            document.getElementById('acc').innerHTML = position.coords.accuracy;
+            document.getElementById('head').innerHTML = position.coords.heading;
+        }
+
+        function no(err) {
+            document.getElementById('lat').innerHTML = err;
+        }
+
+
+
+    </script>
+
+</body>
+
+</html>
